@@ -2,11 +2,13 @@
 
 namespace App\Models;
 
+use App\Shared\Auth\Role;
 use Database\Factories\UserFactory;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Carbon;
@@ -46,6 +48,51 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
         ];
+    }
+
+    /**
+     * Departamentos/roles del personal (multi-rol).
+     *
+     * @return BelongsToMany<Role, $this>
+     */
+    public function roles(): BelongsToMany
+    {
+        return $this->belongsToMany(Role::class);
+    }
+
+    public function hasRole(string ...$slugs): bool
+    {
+        return $this->roles()->whereIn('slug', $slugs)->exists();
+    }
+
+    /**
+     * @param  array<int, string>  $slugs
+     */
+    public function hasAnyRole(array $slugs): bool
+    {
+        return $this->hasRole(...$slugs);
+    }
+
+    public function isAdmin(): bool
+    {
+        return $this->hasRole(Role::ADMIN);
+    }
+
+    public function assignRole(string|Role $role): void
+    {
+        $roleId = $role instanceof Role ? $role->getKey() : Role::where('slug', $role)->firstOrFail()->getKey();
+
+        $this->roles()->syncWithoutDetaching([$roleId]);
+    }
+
+    /**
+     * Slugs de departamentos operativos (excluye admin).
+     *
+     * @return array<int, string>
+     */
+    public function departmentSlugs(): array
+    {
+        return $this->roles()->where('slug', '!=', Role::ADMIN)->pluck('slug')->all();
     }
 
     /**
